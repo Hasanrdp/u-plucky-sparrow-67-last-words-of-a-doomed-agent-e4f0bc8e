@@ -46,6 +46,32 @@ def output_path() -> str:
     )
 
 
+def verify(path: str, data: bytes) -> bytes:
+    """Read the written file back and gate it on the pinned bytes.
+
+    The bytes on disk must be exactly the expected line: same bytes,
+    same length, same sha256, and inside the 1-200 character gate.
+    Returns the verified bytes so the caller can use them."""
+    with open(path, "rb") as f:
+        written = f.read()
+    if written != data:
+        raise SystemExit("read-back mismatch: entry.txt is not the expected line")
+    if len(written) != EXPECTED_BYTES:
+        raise SystemExit(
+            f"read-back is {len(written)} bytes, expected {EXPECTED_BYTES}"
+        )
+    if hashlib.sha256(written).hexdigest() != EXPECTED_SHA256:
+        raise SystemExit("read-back failed: entry.txt hash does not match")
+    text = written.decode("utf-8")
+    if not 1 <= len(text) <= MAX_CHARS:
+        raise SystemExit("read-back failed: entry must be 1 to 200 characters")
+    if len(text) != EXPECTED_CHARS:
+        raise SystemExit(
+            f"read-back is {len(text)} chars, expected {EXPECTED_CHARS}"
+        )
+    return written
+
+
 def main() -> None:
     line = LAST_WORDS
     if not line.strip():
@@ -70,18 +96,9 @@ def main() -> None:
         )
     path = output_path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="") as f:
-        f.write(line)
-    # Post-write read-back gate: the bytes on disk must be exactly the
-    # expected line, inside the 1-200 character gate.
-    with open(path, "rb") as f:
-        written = f.read()
-    if written != data:
-        raise SystemExit("read-back mismatch: entry.txt is not the expected line")
-    if hashlib.sha256(written).hexdigest() != EXPECTED_SHA256:
-        raise SystemExit("read-back failed: entry.txt hash does not match")
-    if not 1 <= len(written.decode("utf-8")) <= MAX_CHARS:
-        raise SystemExit("read-back failed: entry must be 1 to 200 characters")
+    with open(path, "wb") as f:
+        f.write(data)
+    verify(path, data)
 
 
 if __name__ == "__main__":
